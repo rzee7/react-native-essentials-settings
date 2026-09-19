@@ -14,6 +14,10 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
+# Force React Native Core to build from source instead of prebuilt binaries.
+# This avoids header path issues with system frameworks like Network.
+ENV['RCT_USE_PREBUILT_RNCORE'] = '0'
+
 target 'EssentialsSettingsExample' do
   config = use_native_modules!
 
@@ -28,7 +32,14 @@ target 'EssentialsSettingsExample' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
     )
+
+    # Disable the warning that breaks angled imports in framework headers.
+    # Required for libraries that import system frameworks like Network.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      end
+    end
   end
 end

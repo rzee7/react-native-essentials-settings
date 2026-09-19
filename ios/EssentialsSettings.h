@@ -1,5 +1,6 @@
 #import <EssentialsSettingsSpec/EssentialsSettingsSpec.h>
+#import <React/RCTEventEmitter.h>
 
-@interface EssentialsSettings : NSObject <NativeEssentialsSettingsSpec>
+@interface EssentialsSettings : RCTEventEmitter <NativeEssentialsSettingsSpec>
 
 @end

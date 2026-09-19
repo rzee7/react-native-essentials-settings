@@ -15,6 +15,12 @@ Pod::Spec.new do |s|
 
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}"
   s.private_header_files = "ios/**/*.h"
+  s.frameworks = 'Network', 'CoreTelephony', 'AVFoundation'
+
+  s.pod_target_xcconfig = {
+  'CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES' => 'YES',
+  'CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER' => 'NO',
+}
 
   install_modules_dependencies(s)
 end
