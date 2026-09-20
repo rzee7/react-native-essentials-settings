@@ -14,12 +14,17 @@ import {
   useOrientation,
   Preferences,
   SecureStorage,
+  useBattery,
+  useNetworkState,
 } from 'react-native-essentials-settings';
 
 export default function App() {
   const scheme = useColorScheme();
   const fontScale = useFontScale();
   const orientation = useOrientation();
+  const battery = useBattery();
+  const networkState = useNetworkState();
+
   const isDark = scheme === 'dark';
 
   const [quality, setQuality] = useState<string>('—');
@@ -118,6 +123,12 @@ export default function App() {
       />
       <Row label="Type" value={Network.getConnectionType()} isDark={isDark} />
       <Row
+        label="Live Quality"
+        value={networkState.qualityLabel}
+        isDark={isDark}
+      />
+      <Row label="Live Tier" value={networkState.quality} isDark={isDark} />
+      <Row
         label="Generation"
         value={Network.getCellularGeneration() ?? '—'}
         isDark={isDark}
@@ -197,6 +208,13 @@ export default function App() {
         isDark={isDark}
       />
       <Row label="State" value={Device.getBatteryState()} isDark={isDark} />
+
+      <Row
+        label="Live Level"
+        value={battery.level >= 0 ? `${Math.round(battery.level * 100)}%` : '—'}
+        isDark={isDark}
+      />
+      <Row label="Live State" value={battery.state} isDark={isDark} />
 
       <Section title="Device — Persistent ID" isDark={isDark} />
       <Row label="Unique ID" value={uniqueId} isDark={isDark} />
