@@ -11,34 +11,135 @@
 #import <arpa/inet.h>
 
 @interface EssentialsSettings () <NativeEssentialsSettingsSpec>
+@property (nonatomic, strong) nw_path_monitor_t pathMonitor;
+@property (nonatomic, strong) dispatch_queue_t pathMonitorQueue;
 @end
 
 @implementation EssentialsSettings
 
 RCT_EXPORT_MODULE()
 
-- (NSArray<NSString *> *)supportedEvents
-{
-  return @[@"colorSchemeChanged"];
-}
-
 - (void)startObserving
 {
+  // --- Battery ---
+  [UIDevice currentDevice].batteryMonitoringEnabled = YES;
   [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(handleTraitChange)
-                                               name:@"RCTUserInterfaceStyleDidChangeNotification"
+                                           selector:@selector(handleBatteryChange)
+                                               name:UIDeviceBatteryLevelDidChangeNotification
                                              object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleBatteryChange)
+                                               name:UIDeviceBatteryStateDidChangeNotification
+                                             object:nil];
+
+  // --- Network (NWPathMonitor) ---
+  self.pathMonitorQueue = dispatch_queue_create("com.essentialssettings.networkmonitor", NULL);
+  self.pathMonitor = nw_path_monitor_create();
+  nw_path_monitor_set_queue(self.pathMonitor, self.pathMonitorQueue);
+
+  __weak __typeof(self) weakSelf = self;
+  nw_path_monitor_set_update_handler(self.pathMonitor, ^(nw_path_t path) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf handleNetworkPathUpdate:path];
+    });
+  });
+
+  nw_path_monitor_start(self.pathMonitor);
+}
+
+- (void)handleBatteryChange
+{
+  NSNumber *level = [self getBatteryLevel];
+  NSString *state = [self getBatteryState];
+  [self emitOnBatteryChanged:@{@"level": level, @"state": state}];
+}
+
+- (void)handleNetworkPathUpdate:(nw_path_t)path
+{
+  BOOL isConnected = (nw_path_get_status(path) == nw_path_status_satisfied);
+
+  NSString *type = @"unknown";
+  if (isConnected) {
+    if (nw_path_uses_interface_type(path, nw_interface_type_wifi)) {
+      type = @"wifi";
+    } else if (nw_path_uses_interface_type(path, nw_interface_type_cellular)) {
+      type = @"cellular";
+    } else if (nw_path_uses_interface_type(path, nw_interface_type_wired)) {
+      type = @"ethernet";
+    }
+  } else {
+    type = @"none";
+  }
+
+  NSString *generation = [self getCellularGeneration];
+  NSNumber *wifiStrength = [self getWifiSignalStrength];
+  NSNumber *wifiBars = [self getWifiSignalLevel];
+
+  NSString *quality = [self deriveQuality:isConnected
+                                     type:type
+                               generation:generation
+                             wifiStrength:wifiStrength];
+  NSString *qualityLabel = [self deriveQualityLabel:quality];
+
+  [self emitOnNetworkChanged:@{
+    @"isConnected": @(isConnected),
+    @"type": type,
+    @"generation": generation ?: [NSNull null],
+    @"quality": quality,
+    @"qualityLabel": qualityLabel,
+    @"wifiStrength": wifiStrength ?: [NSNull null],
+    @"wifiBars": wifiBars ?: [NSNull null],
+  }];
+}
+
+- (NSString *)deriveQuality:(BOOL)isConnected
+                       type:(NSString *)type
+                 generation:(NSString *)generation
+               wifiStrength:(NSNumber *)wifiStrength
+{
+  if (!isConnected) return @"offline";
+
+  if ([type isEqualToString:@"cellular"]) {
+    if ([generation isEqualToString:@"2g"]) return @"poor";
+    if ([generation isEqualToString:@"3g"]) return @"fair";
+    if ([generation isEqualToString:@"4g"]) return @"good";
+    if ([generation isEqualToString:@"5g"]) return @"excellent";
+    return @"fair";
+  }
+
+  if ([type isEqualToString:@"wifi"]) {
+    if (wifiStrength == nil) return @"good";
+    int rssi = [wifiStrength intValue];
+    if (rssi > -55) return @"excellent";
+    if (rssi > -70) return @"good";
+    if (rssi > -80) return @"fair";
+    return @"poor";
+  }
+
+  if ([type isEqualToString:@"ethernet"]) return @"excellent";
+
+  return @"fair";
+}
+
+- (NSString *)deriveQualityLabel:(NSString *)quality
+{
+  if ([quality isEqualToString:@"offline"]) return @"Offline";
+  if ([quality isEqualToString:@"poor"]) return @"Slow";
+  if ([quality isEqualToString:@"fair"]) return @"Fair";
+  if ([quality isEqualToString:@"good"]) return @"Fast";
+  if ([quality isEqualToString:@"excellent"]) return @"Very fast";
+  return @"Fair";
 }
 
 - (void)stopObserving
 {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
+  [UIDevice currentDevice].batteryMonitoringEnabled = NO;
 
-- (void)handleTraitChange
-{
-  [self sendEventWithName:@"colorSchemeChanged"
-                     body:@{@"colorScheme": [self getColorScheme]}];
+  if (self.pathMonitor) {
+    nw_path_monitor_cancel(self.pathMonitor);
+    self.pathMonitor = nil;
+  }
 }
 
 - (NSString *)getColorScheme
@@ -1191,16 +1292,6 @@ static CFStringRef accessibilityConstant(NSString *value) {
   }
 
   resolve(@(status == errSecSuccess));
-}
-
-RCT_EXPORT_METHOD(addListener:(NSString *)eventName)
-{
-  [super addListener:eventName];
-}
-
-RCT_EXPORT_METHOD(removeListeners:(double)count)
-{
-  [super removeListeners:count];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
