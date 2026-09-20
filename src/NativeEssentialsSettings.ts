@@ -1,4 +1,4 @@
-import type { TurboModule } from 'react-native';
+import type { TurboModule, CodegenTypes } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
 
 export interface Spec extends TurboModule {
@@ -510,12 +510,29 @@ export interface Spec extends TurboModule {
    */
   secureStorageHas(key: string): Promise<boolean>;
 
-  // -------------------------------------------------------------------------
-  // Required by NativeEventEmitter (internal)
+    // -------------------------------------------------------------------------
+  // Event emitters for live hooks
   // -------------------------------------------------------------------------
 
-  addListener(eventName: string): void;
-  removeListeners(count: number): void;
+  readonly onBatteryChanged: CodegenTypes.EventEmitter<BatteryState>;
+  readonly onNetworkChanged: CodegenTypes.EventEmitter<NetworkState>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('EssentialsSettings');
+
+export type BatteryState = {
+  level: number;
+  state: string;
+};
+
+export type NetworkQuality = 'offline' | 'poor' | 'fair' | 'good' | 'excellent';
+
+export type NetworkState = {
+  isConnected: boolean;
+  type: string;
+  generation: string | null;
+  quality: NetworkQuality;
+  qualityLabel: string;
+  wifiStrength: number | null;
+  wifiBars: number | null;
+};

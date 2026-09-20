@@ -787,6 +787,104 @@ export const SecureStorage = {
 };
 
 // ---------------------------------------------------------------------------
+// useBattery
+// ---------------------------------------------------------------------------
+
+export type BatteryInfo = {
+  level: number;
+  state: string;
+};
+
+/**
+ * React hook — returns live battery info.
+ * Updates whenever the battery level or charging state changes.
+ *
+ * @returns { level, state }
+ *   - level: 0.0 to 1.0 (-1.0 if unknown)
+ *   - state: 'charging' | 'full' | 'unplugged' | 'unknown'
+ */
+export function useBattery(): BatteryInfo {
+  const [battery, setBattery] = useState<BatteryInfo>(() => {
+    try {
+      return {
+        level: NativeEssentialsSettings.getBatteryLevel(),
+        state: NativeEssentialsSettings.getBatteryState(),
+      };
+    } catch {
+      return { level: -1, state: 'unknown' };
+    }
+  });
+
+  useEffect(() => {
+    const subscription = NativeEssentialsSettings.onBatteryChanged(
+      (event: BatteryInfo) => {
+        setBattery(event);
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  return battery;
+}
+
+// ---------------------------------------------------------------------------
+// useNetworkState
+// ---------------------------------------------------------------------------
+
+export type NetworkQuality = 'offline' | 'poor' | 'fair' | 'good' | 'excellent';
+
+export type NetworkStateInfo = {
+  isConnected: boolean;
+  type: string;
+  generation: string | null;
+  quality: NetworkQuality;
+  qualityLabel: string;
+  wifiStrength: number | null;
+  wifiBars: number | null;
+};
+
+/**
+ * React hook — returns live network state.
+ * Updates whenever connectivity, type, or quality changes.
+ */
+export function useNetworkState(): NetworkStateInfo {
+  const [state, setState] = useState<NetworkStateInfo>(() => ({
+    isConnected: Network.isConnected(),
+    type: Network.getConnectionType(),
+    generation: Network.getCellularGeneration(),
+    quality: 'fair',
+    qualityLabel: 'Fair',
+    wifiStrength: Network.getWifiSignalStrength(),
+    wifiBars: Network.getWifiSignalLevel(),
+  }));
+
+  useEffect(() => {
+    console.log('[useNetworkState] subscribing to onNetworkChanged');
+    console.log(
+      '[useNetworkState] onNetworkChanged type:',
+      typeof (NativeEssentialsSettings as any).onNetworkChanged
+    );
+
+    const subscription = NativeEssentialsSettings.onNetworkChanged(
+      (event: NetworkStateInfo) => {
+        console.log('[useNetworkState] EVENT RECEIVED:', event);
+        setState(event);
+      }
+    );
+
+    return () => {
+      console.log('[useNetworkState] unsubscribing');
+      subscription.remove();
+    };
+  }, []);
+
+  return state;
+}
+
+// ---------------------------------------------------------------------------
 // Default export
 // ---------------------------------------------------------------------------
 

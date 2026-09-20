@@ -40,9 +40,28 @@ import androidx.security.crypto.MasterKey
 import java.io.File
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import android.content.BroadcastReceiver
+import android.net.Network
+import android.net.NetworkRequest
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class EssentialsSettingsModule(private val reactContext: ReactApplicationContext) :
     NativeEssentialsSettingsSpec(reactContext) {
+
+    init {
+        // Start observers immediately when the module is constructed.
+        // In the New Architecture, event subscribers attach lazily —
+        // we just emit whenever state changes.
+        startBatteryObserving()
+        startNetworkObserving()
+    }
+
+    override fun invalidate() {
+        stopBatteryObserving()
+        stopNetworkObserving()
+        super.invalidate()
+    }
 
     override fun getColorScheme(): String {
         val nightMode = reactContext.resources.configuration.uiMode and
@@ -207,28 +226,34 @@ class EssentialsSettingsModule(private val reactContext: ReactApplicationContext
             return null
         }
 
-        // Use TelephonyManager directly instead of caps.dataNetworkType
-        val tm = reactContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        @Suppress("DEPRECATION")
-        return when (tm.networkType) {
-            TelephonyManager.NETWORK_TYPE_NR -> "5g"
-            TelephonyManager.NETWORK_TYPE_LTE -> "4g"
-            TelephonyManager.NETWORK_TYPE_HSPAP,
-            TelephonyManager.NETWORK_TYPE_HSPA,
-            TelephonyManager.NETWORK_TYPE_HSDPA,
-            TelephonyManager.NETWORK_TYPE_HSUPA,
-            TelephonyManager.NETWORK_TYPE_UMTS,
-            TelephonyManager.NETWORK_TYPE_EVDO_0,
-            TelephonyManager.NETWORK_TYPE_EVDO_A,
-            TelephonyManager.NETWORK_TYPE_EVDO_B -> "3g"
+        return try {
+            val tm = reactContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            @Suppress("DEPRECATION")
+            when (tm.networkType) {
+                TelephonyManager.NETWORK_TYPE_NR -> "5g"
+                TelephonyManager.NETWORK_TYPE_LTE -> "4g"
+                TelephonyManager.NETWORK_TYPE_HSPAP,
+                TelephonyManager.NETWORK_TYPE_HSPA,
+                TelephonyManager.NETWORK_TYPE_HSDPA,
+                TelephonyManager.NETWORK_TYPE_HSUPA,
+                TelephonyManager.NETWORK_TYPE_UMTS,
+                TelephonyManager.NETWORK_TYPE_EVDO_0,
+                TelephonyManager.NETWORK_TYPE_EVDO_A,
+                TelephonyManager.NETWORK_TYPE_EVDO_B -> "3g"
 
-            TelephonyManager.NETWORK_TYPE_GPRS,
-            TelephonyManager.NETWORK_TYPE_EDGE,
-            TelephonyManager.NETWORK_TYPE_CDMA,
-            TelephonyManager.NETWORK_TYPE_1xRTT,
-            TelephonyManager.NETWORK_TYPE_IDEN -> "2g"
+                TelephonyManager.NETWORK_TYPE_GPRS,
+                TelephonyManager.NETWORK_TYPE_EDGE,
+                TelephonyManager.NETWORK_TYPE_CDMA,
+                TelephonyManager.NETWORK_TYPE_1xRTT,
+                TelephonyManager.NETWORK_TYPE_IDEN -> "2g"
 
-            else -> null
+                else -> null
+            }
+        } catch (e: SecurityException) {
+            // Android 11+ requires READ_PHONE_STATE for cellular generation
+            null
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -1103,13 +1128,193 @@ class EssentialsSettingsModule(private val reactContext: ReactApplicationContext
         }
     }
 
-    override fun addListener(eventName: String?) {
-        // Required by NativeEventEmitter, no-op for now.
+    // ---------------------------------------------------------------------------
+// Event emitters — battery + network
+// ---------------------------------------------------------------------------
+
+    fun addListener(eventName: String?) {
+        // No-op: observers are started in init() for the New Architecture.
     }
 
-    override fun removeListeners(count: Double) {
-        // Required by NativeEventEmitter, no-op for now.
+    fun removeListeners(count: Double) {
+        // No-op: cleanup happens in invalidate().
     }
+
+    private fun startBatteryObserving() {
+        if (batteryReceiver != null) return
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                emitBatteryChanged()
+            }
+        }
+
+        reactContext.registerReceiver(
+            receiver,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )
+        batteryReceiver = receiver
+    }
+
+    private fun stopBatteryObserving() {
+        batteryReceiver?.let {
+            try {
+                reactContext.unregisterReceiver(it)
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        batteryReceiver = null
+    }
+
+    private fun emitBatteryChanged() {
+        val map = Arguments.createMap().apply {
+            putDouble("level", getBatteryLevel())
+            putString("state", getBatteryState())
+        }
+        sendEvent("onBatteryChanged", map)
+    }
+
+    private fun startNetworkObserving() {
+        android.util.Log.d("ESSENTIALS", "startNetworkObserving called")
+        if (networkCallback != null) {
+            android.util.Log.d("ESSENTIALS", "  already observing")
+            return
+        }
+
+        val cm = reactContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                android.util.Log.d("ESSENTIALS", "▶ onAvailable fired")
+                emitNetworkChanged()
+            }
+
+            override fun onLost(network: Network) {
+                android.util.Log.d("ESSENTIALS", "▶ onLost fired")
+                emitNetworkChanged()
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                caps: NetworkCapabilities
+            ) {
+                android.util.Log.d("ESSENTIALS", "▶ onCapabilitiesChanged fired")
+                emitNetworkChanged()
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        cm.registerNetworkCallback(request, callback)
+        networkCallback = callback
+        android.util.Log.d("ESSENTIALS", "✓ network callback registered")
+    }
+
+    private fun stopNetworkObserving() {
+        networkCallback?.let {
+            try {
+                val cm = reactContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                cm.unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        networkCallback = null
+    }
+
+    private fun emitNetworkChanged() {
+        android.util.Log.d("ESSENTIALS", "▶ emitNetworkChanged called")
+
+        val isConnected = isConnected()
+        val type = getConnectionType()
+        val generation = getCellularGeneration()
+        val wifiStrength = getWifiSignalStrength()
+        val wifiBars = getWifiSignalLevel()
+
+        val quality = deriveQuality(isConnected, type, generation, wifiStrength)
+        val qualityLabel = deriveQualityLabel(quality)
+
+        android.util.Log.d("ESSENTIALS", "  isConnected=$isConnected type=$type quality=$quality")
+        android.util.Log.d("ESSENTIALS", "  callback=$mEventEmitterCallback")
+
+        val map = Arguments.createMap().apply {
+            putBoolean("isConnected", isConnected)
+            putString("type", type)
+            if (generation != null) putString("generation", generation) else putNull("generation")
+            putString("quality", quality)
+            putString("qualityLabel", qualityLabel)
+            if (wifiStrength != null) putDouble("wifiStrength", wifiStrength) else putNull("wifiStrength")
+            if (wifiBars != null) putDouble("wifiBars", wifiBars) else putNull("wifiBars")
+        }
+
+        android.util.Log.d("ESSENTIALS", "  calling emitOnNetworkChanged...")
+        emitOnNetworkChanged(map)
+        android.util.Log.d("ESSENTIALS", "  ✓ emitOnNetworkChanged returned")
+    }
+
+    private fun deriveQuality(
+        isConnected: Boolean,
+        type: String,
+        generation: String?,
+        wifiStrength: Double?
+    ): String {
+        if (!isConnected) return "offline"
+
+        if (type == "cellular") {
+            return when (generation) {
+                "2g" -> "poor"
+                "3g" -> "fair"
+                "4g" -> "good"
+                "5g" -> "excellent"
+                else -> "fair"
+            }
+        }
+
+        if (type == "wifi") {
+            if (wifiStrength == null) return "good"
+            val rssi = wifiStrength.toInt()
+            return when {
+                rssi > -55 -> "excellent"
+                rssi > -70 -> "good"
+                rssi > -80 -> "fair"
+                else -> "poor"
+            }
+        }
+
+        if (type == "ethernet") return "excellent"
+
+        return "fair"
+    }
+
+    private fun deriveQualityLabel(quality: String): String {
+        return when (quality) {
+            "offline" -> "Offline"
+            "poor" -> "Slow"
+            "fair" -> "Fair"
+            "good" -> "Fast"
+            "excellent" -> "Very fast"
+            else -> "Fair"
+        }
+    }
+
+    private fun sendEvent(eventName: String, params: com.facebook.react.bridge.WritableMap) {
+        try {
+            // Use the New Architecture emitter for the battery/network events.
+            // The callback is registered by Codegen when JS subscribes.
+            when (eventName) {
+                "onBatteryChanged" -> emitOnBatteryChanged(params)
+                "onNetworkChanged" -> emitOnNetworkChanged(params)
+            }
+        } catch (e: Exception) {
+            // No subscriber yet — ignore
+        }
+    }
+
+    private var batteryReceiver: BroadcastReceiver? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     companion object {
         const val NAME = NativeEssentialsSettingsSpec.NAME

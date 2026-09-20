@@ -6,26 +6,6 @@ through a single TypeScript API.
 
 ## What it does
 
-## Demo
-
-Screenshots from the example app, running on iOS Simulator and Android Emulator.
-
-| Appearance (Light) | Appearance (Dark) | Display · Locale |
-|:---:|:---:|:---:|
-| <img src="./assets/1-light.png" width="220" /> | <img src="./assets/1-dark.png" width="220" /> | <img src="./assets/1-android-light.png" width="220" /> |
-
-| Network (iOS) | Network (Android) | Haptics |
-|:---:|:---:|:---:|
-| <img src="./assets/network.png" width="220" /> | <img src="./assets/android-network.png" width="220" /> | <img src="./assets/heptic.png" width="220" /> |
-
-| Haptics + Preferences | Launcher | SecureStorage |
-|:---:|:---:|:---:|
-| <img src="./assets/android-heptic-pref.png" width="220" /> | <img src="./assets/Android-launcher.png" width="220" /> | <img src="./assets/secure.png" width="220" /> |
-
-| SecureStorage (Android) | Appearance (Android Dark) | |
-|:---:|:---:|:---:|
-| <img src="./assets/android-secure.png" width="220" /> | <img src="./assets/1-android-dark.png" width="220" /> | |
-
 Eleven namespaces, one import:
 
 - **Appearance** — color scheme, font scale
@@ -39,8 +19,29 @@ Eleven namespaces, one import:
 - **Launcher** — open URL, dial, email, SMS, system settings
 - **Preferences** — plain key-value storage (strings and objects)
 - **SecureStorage** — encrypted key-value storage
+- **Live hooks** — useColorScheme, useFontScale, useOrientation, useNetworkState, useBattery
 
 Built as a Turbo Module for the New Architecture.
+
+## Demo
+
+Screenshots from the example app, running on iOS Simulator and Android Emulator.
+
+|               Appearance (Light)               |               Appearance (Dark)               |                    Display · Locale                    |
+| :--------------------------------------------: | :-------------------------------------------: | :----------------------------------------------------: |
+| <img src="./assets/1-light.png" width="220" /> | <img src="./assets/1-dark.png" width="220" /> | <img src="./assets/1-android-light.png" width="220" /> |
+
+|                 Network (iOS)                  |                   Network (Android)                    |                    Haptics                    |
+| :--------------------------------------------: | :----------------------------------------------------: | :-------------------------------------------: |
+| <img src="./assets/network.png" width="220" /> | <img src="./assets/android-network.png" width="220" /> | <img src="./assets/heptic.png" width="220" /> |
+
+|                   Haptics + Preferences                    |                        Launcher                         |                 SecureStorage                 |
+| :--------------------------------------------------------: | :-----------------------------------------------------: | :-------------------------------------------: |
+| <img src="./assets/android-heptic-pref.png" width="220" /> | <img src="./assets/Android-launcher.png" width="220" /> | <img src="./assets/secure.png" width="220" /> |
+
+|                SecureStorage (Android)                |               Appearance (Android Dark)               |     |
+| :---------------------------------------------------: | :---------------------------------------------------: | :-: |
+| <img src="./assets/android-secure.png" width="220" /> | <img src="./assets/1-android-dark.png" width="220" /> |     |
 
 ## Installation
 
@@ -87,6 +88,18 @@ For the Wi-Fi signal methods, add:
     android:maxSdkVersion="32" />
 ```
 
+For `Network.getCellularGeneration()` on Android 11+ (API 30+), add:
+
+```xml
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+```
+
+**This is a runtime permission.** Without it, `getCellularGeneration()`
+always returns `null` on Android 11+. The user will see a system permission
+prompt the first time your app requests it. If your app doesn't need to
+distinguish cellular generations, you can omit this permission and treat
+the method as always returning `null`.
+
 ## Usage
 
 ```ts
@@ -101,90 +114,102 @@ import {
   Preferences,
   SecureStorage,
   Share,
+  useBattery,
   useColorScheme,
   useFontScale,
+  useNetworkState,
   useOrientation,
 } from 'react-native-essentials-settings';
 
 // Appearance
-const scheme = useColorScheme();     // 'light' | 'dark' | 'unspecified'
-const fontScale = useFontScale();    // 1.0, 1.15, 1.30, ...
+const scheme = useColorScheme(); // 'light' | 'dark' | 'unspecified'
+const fontScale = useFontScale(); // 1.0, 1.15, 1.30, ...
 
 // Display
-Display.getWidth();                  // 390
-Display.getHeight();                 // 844
-Display.getScale();                  // 3.0
-Display.getOrientation();            // 'portrait' | 'landscape'
-Display.getSize();                   // 'small' | 'normal' | 'large' | 'xlarge'
-const orientation = useOrientation();// live hook
+Display.getWidth(); // 390
+Display.getHeight(); // 844
+Display.getScale(); // 3.0
+Display.getOrientation(); // 'portrait' | 'landscape'
+Display.getSize(); // 'small' | 'normal' | 'large' | 'xlarge'
+const orientation = useOrientation(); // live hook
 
 // Locale — identity
-Locale.getLocale();                  // 'en_IN'
-Locale.getLanguage();                // 'en'
-Locale.getCountry();                 // 'IN'
-Locale.isRTL();                      // false
-Locale.getTimeZone();                // 'Asia/Kolkata'
+Locale.getLocale(); // 'en_IN'
+Locale.getLanguage(); // 'en'
+Locale.getCountry(); // 'IN'
+Locale.isRTL(); // false
+Locale.getTimeZone(); // 'Asia/Kolkata'
 
 // Locale — preferences
-Locale.usesMetricSystem();           // true
-Locale.getCurrencyCode();            // 'INR'
-Locale.uses24HourClock();            // true
-Locale.getCalendar();                // 'gregorian'
-Locale.getDecimalSeparator();        // '.'
-Locale.getTemperatureUnit();         // 'celsius'
+Locale.usesMetricSystem(); // true
+Locale.getCurrencyCode(); // 'INR'
+Locale.uses24HourClock(); // true
+Locale.getCalendar(); // 'gregorian'
+Locale.getDecimalSeparator(); // '.'
+Locale.getTemperatureUnit(); // 'celsius'
 
 // Network — connectivity
-Network.isConnected();               // true
-Network.getConnectionType();         // 'wifi' | 'cellular' | 'ethernet' | 'none' | 'unknown'
-Network.getCellularGeneration();     // '2g' | '3g' | '4g' | '5g' | null
+Network.isConnected(); // true
+Network.getConnectionType(); // 'wifi' | 'cellular' | 'ethernet' | 'none' | 'unknown'
+Network.getCellularGeneration(); // '2g' | '3g' | '4g' | '5g' | null
 
 // Network — Wi-Fi signal (Android only, returns null on iOS)
-Network.getWifiSignalStrength();     // -45
-Network.getWifiSignalLevel();        // 4
-Network.getWifiLinkSpeed();          // 433
+Network.getWifiSignalStrength(); // -45
+Network.getWifiSignalLevel(); // 4
+Network.getWifiLinkSpeed(); // 433
 
 // Network — measurement (async, hits the network)
-await Network.measureLatency();      // 42
-await Network.measureDownloadSpeed();// 45.2
-await Network.measurePacketLoss();   // 0.5
+await Network.measureLatency(); // 42
+await Network.measureDownloadSpeed(); // 45.2
+await Network.measurePacketLoss(); // 0.5
 await Network.measureQuality();
 // { latencyMs, downloadMbps, packetLossPercent, score, tier }
 
+// Network — live hook
+const network = useNetworkState();
+// { isConnected: true, type: 'wifi', generation: null,
+//   quality: 'excellent', qualityLabel: 'Very fast',
+//   wifiStrength: -45, wifiBars: 4 }
+
 // Device — app info
-Device.getAppVersion();              // '1.0'
-Device.getBuildNumber();             // '42'
-Device.getBundleId();                // 'com.example.app'
-Device.getApplicationName();         // 'My App'
+Device.getAppVersion(); // '1.0'
+Device.getBuildNumber(); // '42'
+Device.getBundleId(); // 'com.example.app'
+Device.getApplicationName(); // 'My App'
 
 // Device — hardware
-Device.getDeviceName();              // "John's iPhone" | 'Pixel 8'
-Device.getSystemName();              // 'iOS' | 'Android'
-Device.getSystemVersion();           // '26.0' | '16'
-Device.getModel();                   // 'iPhone17,1' | 'Pixel 8'
-Device.isEmulator();                 // false
-Device.isHeadphonesConnected();      // false
+Device.getDeviceName(); // "John's iPhone" | 'Pixel 8'
+Device.getSystemName(); // 'iOS' | 'Android'
+Device.getSystemVersion(); // '26.0' | '16'
+Device.getModel(); // 'iPhone17,1' | 'Pixel 8'
+Device.isEmulator(); // false
+Device.isHeadphonesConnected(); // false
 
 // Device — battery
-Device.getBatteryLevel();            // 0.85 | -1.0 if unknown
-Device.getBatteryState();            // 'charging' | 'full' | 'unplugged' | 'unknown'
+Device.getBatteryLevel(); // 0.85 | -1.0 if unknown
+Device.getBatteryState(); // 'charging' | 'full' | 'unplugged' | 'unknown'
+
+// Device — live battery hook
+const battery = useBattery();
+// { level: 0.85, state: 'unplugged' }
 
 // Device — persistent ID (async, SHA-256 hashed)
-await Device.getUniqueId();          // 'a3f2c1d4e5...'
+await Device.getUniqueId(); // 'a3f2c1d4e5...'
 
 // Clipboard
 await Clipboard.setString('hello');
-await Clipboard.getString();         // 'hello'
-await Clipboard.hasString();         // true
+await Clipboard.getString(); // 'hello'
+await Clipboard.hasString(); // true
 
 // Share
 await Share.share({ message: 'Check this out!' });
 await Share.share({ message: 'Article', url: 'https://example.com' });
 
 // Haptics
-Haptics.impact('light');             // 'light' | 'medium' | 'heavy'
-Haptics.notification('success');     // 'success' | 'warning' | 'error'
+Haptics.impact('light'); // 'light' | 'medium' | 'heavy'
+Haptics.notification('success'); // 'success' | 'warning' | 'error'
 Haptics.selection();
-Haptics.vibrate();                   // Android only
+Haptics.vibrate(); // Android only
 
 // Launcher
 await Launcher.openURL('https://reactnative.dev');
@@ -196,36 +221,63 @@ await Launcher.openSettings('notification'); // Android only, iOS falls back
 
 // Preferences (plain, unencrypted)
 await Preferences.set('theme', 'dark');
-await Preferences.get('theme');              // 'dark'
+await Preferences.get('theme'); // 'dark'
 await Preferences.setObject('user', { id: 1 });
-await Preferences.getObject('user');         // { id: 1 }
-await Preferences.has('theme');              // true
+await Preferences.getObject('user'); // { id: 1 }
+await Preferences.has('theme'); // true
 await Preferences.remove('theme');
 await Preferences.clear();
 
 // SecureStorage (encrypted)
 await SecureStorage.set('token', 'abc123');
-await SecureStorage.get('token');            // 'abc123'
+await SecureStorage.get('token'); // 'abc123'
 await SecureStorage.set('token', 'abc123', 'afterFirstUnlock');
 await SecureStorage.setObject('auth', { token: 'abc' });
-await SecureStorage.getObject('auth');       // { token: 'abc' }
-await SecureStorage.has('token');            // true
+await SecureStorage.getObject('auth'); // { token: 'abc' }
+await SecureStorage.has('token'); // true
 await SecureStorage.remove('token');
 await SecureStorage.clear();
 ```
 
+## Live Hooks
+
+Hooks that subscribe to native events and update the UI automatically — no reload required.
+
+| Hook                | Returns                                                                            | Updates when                            |
+| ------------------- | ---------------------------------------------------------------------------------- | --------------------------------------- |
+| `useColorScheme()`  | `'light' \| 'dark' \| 'unspecified'`                                               | System appearance changes               |
+| `useFontScale()`    | `number`                                                                           | Font size changes (reload on iOS)       |
+| `useOrientation()`  | `'portrait' \| 'landscape'`                                                        | Device rotates                          |
+| `useNetworkState()` | `{ isConnected, type, generation, quality, qualityLabel, wifiStrength, wifiBars }` | Connectivity, type, or signal changes   |
+| `useBattery()`      | `{ level, state }`                                                                 | Battery level or charging state changes |
+
+### Network quality tiers
+
+`'offline' | 'poor' | 'fair' | 'good' | 'excellent'`
+
+Derived from connection type and Wi-Fi signal strength:
+
+- Cellular 2G → `poor` · 3G → `fair` · 4G → `good` · 5G → `excellent`
+- Wi-Fi uses RSSI thresholds (Android only; iOS defaults to `good`)
+
+### Battery states
+
+`'charging' | 'full' | 'unplugged' | 'unknown'`
+
 ## Platform differences
 
-| Signal | iOS | Android |
-|---|---|---|
-| Color scheme | Live | Live |
-| Font scale | Reload required | Live |
-| Orientation | Live | Live |
-| Wi-Fi signal | Not available | Available |
-| Battery level | -1.0 on Simulator | Available |
-| Model identifier | Host arch on Simulator | Device model |
-| Haptics | iPhone 7+ | Requires vibrator |
-| Specific settings screens | App settings only | Full support |
+| Signal                    | iOS                    | Android           |
+| ------------------------- | ---------------------- | ----------------- |
+| Color scheme              | Live                   | Live              |
+| Font scale                | Reload required        | Live              |
+| Orientation               | Live                   | Live              |
+| Network state             | Live                   | Live              |
+| Battery                   | Live (real device)     | Live              |
+| Wi-Fi signal              | Not available          | Available         |
+| Battery level             | -1.0 on Simulator      | Available         |
+| Model identifier          | Host arch on Simulator | Device model      |
+| Haptics                   | iPhone 7+              | Requires vibrator |
+| Specific settings screens | App settings only      | Full support      |
 
 **Font scale on iOS** only updates on app reload. React Native's core doesn't
 propagate the system notification reliably, so a reload is needed for now.
@@ -307,6 +359,10 @@ yarn lint                 # lint
 
 Don't run `npm install` or `npx react-native run-*` from inside `example/`.
 It bypasses the workspace and will fail.
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes per version.
 
 ## Contributing
 
