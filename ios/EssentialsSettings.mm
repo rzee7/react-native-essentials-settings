@@ -19,6 +19,16 @@
 
 RCT_EXPORT_MODULE()
 
+- (void)initialize
+{
+  [self startObserving];
+}
+
+- (void)dealloc
+{
+  [self stopObserving];
+}
+
 - (void)startObserving
 {
   // --- Battery ---
