@@ -804,10 +804,16 @@ export type BatteryInfo = {
  *   - state: 'charging' | 'full' | 'unplugged' | 'unknown'
  */
 export function useBattery(): BatteryInfo {
-  const [battery, setBattery] = useState<BatteryInfo>(() => ({
-    level: NativeEssentialsSettings.getBatteryLevel(),
-    state: NativeEssentialsSettings.getBatteryState(),
-  }));
+  const [battery, setBattery] = useState<BatteryInfo>(() => {
+    try {
+      return {
+        level: NativeEssentialsSettings.getBatteryLevel(),
+        state: NativeEssentialsSettings.getBatteryState(),
+      };
+    } catch {
+      return { level: -1, state: 'unknown' };
+    }
+  });
 
   useEffect(() => {
     const subscription = NativeEssentialsSettings.onBatteryChanged(
